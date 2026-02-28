@@ -16,7 +16,6 @@ import {
   ArrowLeft,
   BookOpen,
   Network,
-  Calendar,
   User,
   Tag,
   Trash2,

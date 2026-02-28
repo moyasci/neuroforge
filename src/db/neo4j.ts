@@ -30,7 +30,7 @@ export async function createConcept(concept: {
   field?: string;
   tags?: string[];
 }) {
-  const _config = getConfig();
+  getConfig();
   // Phase 4: Execute Cypher query via neo4j-driver
   // CREATE (c:Concept {id: $id, name: $name, description: $description, ...})
   console.log(`[Neo4j] Creating concept: ${concept.name}`);
@@ -42,7 +42,7 @@ export async function createRelation(
   type: string,
   properties?: Record<string, unknown>,
 ) {
-  const _config = getConfig();
+  getConfig();
   // Phase 4: Execute Cypher query
   // MATCH (a:Concept {id: $fromId}), (b:Concept {id: $toId})
   // CREATE (a)-[r:TYPE {props}]->(b)
@@ -53,7 +53,7 @@ export async function findRelatedConcepts(
   conceptId: string,
   maxHops: number = 2,
 ): Promise<Array<{ id: string; name: string; distance: number }>> {
-  const _config = getConfig();
+  getConfig();
   // Phase 4: Execute Cypher query
   // MATCH (start:Concept {id: $id})-[*1..maxHops]-(related:Concept)
   // RETURN related, length(path) as distance

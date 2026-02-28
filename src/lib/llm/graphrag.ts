@@ -6,7 +6,7 @@ import type { GraphRAGContext } from "./client";
 
 export async function buildGraphRAGContext(
   query: string,
-  _options?: {
+  _options?: { // eslint-disable-line @typescript-eslint/no-unused-vars
     maxConcepts?: number;
     maxHops?: number;
     includeRelatedPapers?: boolean;

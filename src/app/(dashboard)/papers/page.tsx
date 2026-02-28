@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, FileText, User } from "lucide-react";
 import { useDatabase, useDatabaseStatus } from "@/db/provider";
-import { getPapers, getPapersByField, deletePaper } from "@/lib/papers/actions";
+import { getPapers, getPapersByField } from "@/lib/papers/actions";
 import type { Paper } from "@/lib/papers/actions";
 import { PAPER_FIELDS, type PaperField, type ReadingPhase } from "@/types";
 

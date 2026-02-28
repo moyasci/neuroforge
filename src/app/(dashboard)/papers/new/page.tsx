@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useDatabase, useDatabaseStatus } from "@/db/provider";
 import { createPaper } from "@/lib/papers/actions";
-import { fetchByDOI, fetchByURL, fetchByTitle } from "@/lib/papers/metadata";
+import { fetchByDOI, fetchByURL } from "@/lib/papers/metadata";
 import type { PaperMetadata } from "@/lib/papers/metadata";
 import { PAPER_FIELDS, type PaperField } from "@/types";
 

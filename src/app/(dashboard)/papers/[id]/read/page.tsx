@@ -14,7 +14,7 @@ import {
   BookOpen,
   ChevronRight,
 } from "lucide-react";
-import { useDatabase, useDatabaseStatus } from "@/db/provider";
+import { useDatabaseStatus } from "@/db/provider";
 import { getPaper, updatePaperPhase, type Paper } from "@/lib/papers/actions";
 import type { ReadingPhase } from "@/types";
 
@@ -128,7 +128,6 @@ export default function ReadPage({
   const loadPaper = useCallback(async () => {
     if (!isReady) return;
     try {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
       const db = (await import("@/db/pglite")).getDatabase();
       if (!db) return;
       const result = await getPaper(db, id);

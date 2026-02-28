@@ -10,4 +10,4 @@
 // For server-side usage (e.g. NextAuth adapter), this will need to be
 // replaced with a proper PostgreSQL connection or Supabase client.
 
-export const db = {} as any;
+export const db = {} as Record<string, unknown>;
