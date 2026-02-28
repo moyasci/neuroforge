@@ -1,17 +1,31 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
-  ArrowLeft,
-  Save,
-  MessageSquare,
-  Lightbulb,
-  AlertTriangle,
-} from "lucide-react";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowLeft, Save, Check } from "lucide-react";
+import { useDatabaseStatus } from "@/db/provider";
+import { getNote, updateNote, type Note } from "@/lib/notes/actions";
+import { NOTE_TYPES, type NoteType } from "@/types";
+import TiptapEditor from "@/components/editor/TiptapEditor";
+import FeedbackPanel from "@/components/notes/FeedbackPanel";
+
+const NOTE_TYPE_LABELS: Record<NoteType, string> = {
+  summary: "要約",
+  concept: "概念",
+  reflection: "考察",
+  critique: "批評",
+};
 
 export default function NoteEditorPage({
   params,
@@ -19,6 +33,91 @@ export default function NoteEditorPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { isReady } = useDatabaseStatus();
+  const [note, setNote] = useState<Note | null>(null);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [noteType, setNoteType] = useState<NoteType>("summary");
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">(
+    "idle",
+  );
+  const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadNote = useCallback(async () => {
+    if (!isReady) return;
+    try {
+      const db = (await import("@/db/pglite")).getDatabase();
+      if (!db) return;
+      const result = await getNote(db, id);
+      if (result) {
+        setNote(result);
+        setTitle(result.title);
+        setContent(result.content ?? "");
+        setNoteType(result.noteType as NoteType);
+      }
+    } catch (err) {
+      console.error("Failed to load note:", err);
+    }
+  }, [id, isReady]);
+
+  useEffect(() => {
+    loadNote();
+  }, [loadNote]);
+
+  const saveNote = useCallback(
+    async (data: { title?: string; content?: string; noteType?: NoteType }) => {
+      if (!isReady) return;
+      setSaveStatus("saving");
+      try {
+        const db = (await import("@/db/pglite")).getDatabase();
+        if (!db) return;
+        const updated = await updateNote(db, id, data);
+        if (updated) setNote(updated);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 2000);
+      } catch (err) {
+        console.error("Failed to save note:", err);
+        setSaveStatus("idle");
+      }
+    },
+    [id, isReady],
+  );
+
+  const handleContentChange = useCallback(
+    (newContent: string) => {
+      setContent(newContent);
+      saveNote({ content: newContent });
+    },
+    [saveNote],
+  );
+
+  const handleTitleChange = useCallback(
+    (value: string) => {
+      setTitle(value);
+      if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current);
+      titleDebounceRef.current = setTimeout(() => {
+        saveNote({ title: value });
+      }, 500);
+    },
+    [saveNote],
+  );
+
+  const handleNoteTypeChange = useCallback(
+    (value: string) => {
+      setNoteType(value as NoteType);
+      saveNote({ noteType: value as NoteType });
+    },
+    [saveNote],
+  );
+
+  if (!isReady || !note) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
+        <div className="h-96 w-full bg-muted animate-pulse rounded" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -29,90 +128,51 @@ export default function NoteEditorPage({
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <h2 className="text-lg font-bold tracking-tight">
-              Transformer アーキテクチャまとめ
-            </h2>
-            <p className="text-xs text-muted-foreground">Note ID: {id}</p>
+          <div className="flex-1">
+            <Input
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              className="text-lg font-bold border-none shadow-none px-0 focus-visible:ring-0"
+              placeholder="ノートタイトル..."
+            />
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="secondary">自動保存済み</Badge>
-          <Button size="sm">
-            <Save className="mr-2 h-4 w-4" />
-            保存
-          </Button>
+          <Select value={noteType} onValueChange={handleNoteTypeChange}>
+            <SelectTrigger className="w-24 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NOTE_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {NOTE_TYPE_LABELS[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {saveStatus === "saving" && (
+            <Badge variant="secondary" className="text-xs">
+              <Save className="mr-1 h-3 w-3 animate-spin" />
+              保存中
+            </Badge>
+          )}
+          {saveStatus === "saved" && (
+            <Badge variant="secondary" className="text-xs">
+              <Check className="mr-1 h-3 w-3" />
+              保存済み
+            </Badge>
+          )}
         </div>
       </div>
 
       <div className="grid h-[calc(100vh-12rem)] gap-4 lg:grid-cols-3">
-        {/* Editor Area */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">エディタ</CardTitle>
-          </CardHeader>
-          <CardContent className="h-full">
-            <div className="flex h-[calc(100%-2rem)] items-center justify-center rounded-lg border-2 border-dashed">
-              <div className="text-center">
-                <p className="text-muted-foreground">
-                  Tiptap リッチテキストエディタ
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  マークダウン / 数式 / コードブロック対応
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Editor */}
+        <div className="lg:col-span-2">
+          <TiptapEditor content={content} onChange={handleContentChange} />
+        </div>
 
         {/* AI Feedback Panel */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <MessageSquare className="h-4 w-4" />
-              AI フィードバック
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-green-500/30 bg-green-500/10 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Lightbulb className="h-4 w-4 text-green-500" />
-                理解度チェック
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Self-attention の説明が正確です。Query, Key,
-                Value の役割を自分の言葉で説明できています。
-              </p>
-            </div>
-
-            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                改善提案
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Positional Encoding の説明にもう少し数式的な裏付けを
-                追加すると、理解が深まります。
-              </p>
-            </div>
-
-            <div className="rounded-md border p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <MessageSquare className="h-4 w-4" />
-                関連質問
-              </div>
-              <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
-                <li>- Multi-head attention はなぜ有効？</li>
-                <li>- Layer normalization の位置は？</li>
-                <li>- Decoder の masked attention とは？</li>
-              </ul>
-            </div>
-
-            <Button variant="outline" className="w-full" size="sm">
-              フィードバックを更新
-            </Button>
-          </CardContent>
-        </Card>
+        <FeedbackPanel noteId={id} noteContent={content} />
       </div>
     </div>
   );

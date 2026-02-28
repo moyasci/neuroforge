@@ -13,10 +13,24 @@ import {
   Circle,
   BookOpen,
   ChevronRight,
+  Highlighter,
+  PanelRight,
 } from "lucide-react";
 import { useDatabaseStatus } from "@/db/provider";
 import { getPaper, updatePaperPhase, type Paper } from "@/lib/papers/actions";
-import type { ReadingPhase } from "@/types";
+import {
+  getAnnotations,
+  createAnnotation,
+  deleteAnnotation,
+  type Annotation,
+} from "@/lib/annotations/actions";
+import type { ReadingPhase, AnnotationColor } from "@/types";
+import PDFViewer, {
+  type TextSelection,
+} from "@/components/pdf/PDFViewer";
+import AnnotationLayer from "@/components/pdf/AnnotationLayer";
+import AnnotationToolbar from "@/components/annotations/AnnotationToolbar";
+import AnnotationSidebar from "@/components/annotations/AnnotationSidebar";
 
 interface PassConfig {
   key: string;
@@ -110,13 +124,17 @@ export default function ReadPage({
   const { id } = use(params);
   const { isReady } = useDatabaseStatus();
   const [paper, setPaper] = useState<Paper | null>(null);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [completedTasks, setCompletedTasks] = useState<
     Record<string, boolean[]>
   >({});
   const [activeTab, setActiveTab] = useState("overview");
   const [saving, setSaving] = useState(false);
+  const [textSelection, setTextSelection] = useState<TextSelection | null>(
+    null,
+  );
+  const [showSidebar, setShowSidebar] = useState(true);
 
-  // Initialize completed tasks tracking
   useEffect(() => {
     const initial: Record<string, boolean[]> = {};
     PASSES.forEach((p) => {
@@ -133,7 +151,6 @@ export default function ReadPage({
       const result = await getPaper(db, id);
       if (result) {
         setPaper(result);
-        // Set active tab to current phase
         const currentPhaseIdx = phaseIndex(result.readingPhase);
         if (currentPhaseIdx >= 1 && currentPhaseIdx <= 4) {
           setActiveTab(PASSES[currentPhaseIdx - 1].key);
@@ -144,9 +161,22 @@ export default function ReadPage({
     }
   }, [id, isReady]);
 
+  const loadAnnotations = useCallback(async () => {
+    if (!isReady) return;
+    try {
+      const db = (await import("@/db/pglite")).getDatabase();
+      if (!db) return;
+      const result = await getAnnotations(db, id);
+      setAnnotations(result);
+    } catch (err) {
+      console.error("Failed to load annotations:", err);
+    }
+  }, [id, isReady]);
+
   useEffect(() => {
     loadPaper();
-  }, [loadPaper]);
+    loadAnnotations();
+  }, [loadPaper, loadAnnotations]);
 
   const toggleTask = (passKey: string, taskIndex: number) => {
     setCompletedTasks((prev) => {
@@ -163,12 +193,10 @@ export default function ReadPage({
     try {
       const db = (await import("@/db/pglite")).getDatabase();
       if (!db) return;
-
       const nextPhase =
         passIndex < 3
           ? PASSES[passIndex + 1].phase
           : ("completed" as ReadingPhase);
-
       const updated = await updatePaperPhase(db, paper.id, nextPhase);
       if (updated) {
         setPaper(updated);
@@ -183,6 +211,44 @@ export default function ReadPage({
     }
   };
 
+  const handleTextSelect = (selection: TextSelection) => {
+    setTextSelection(selection);
+  };
+
+  const handleAnnotate = async (color: AnnotationColor, comment?: string) => {
+    if (!textSelection) return;
+    try {
+      const db = (await import("@/db/pglite")).getDatabase();
+      if (!db) return;
+      await createAnnotation(db, {
+        paperId: id,
+        color,
+        text: textSelection.text,
+        comment,
+        position: {
+          pageNumber: textSelection.pageNumber,
+          rects: textSelection.rects,
+        },
+      });
+      setTextSelection(null);
+      window.getSelection()?.removeAllRanges();
+      await loadAnnotations();
+    } catch (err) {
+      console.error("Failed to create annotation:", err);
+    }
+  };
+
+  const handleDeleteAnnotation = async (annotationId: string) => {
+    try {
+      const db = (await import("@/db/pglite")).getDatabase();
+      if (!db) return;
+      await deleteAnnotation(db, annotationId);
+      await loadAnnotations();
+    } catch (err) {
+      console.error("Failed to delete annotation:", err);
+    }
+  };
+
   if (!isReady || !paper) {
     return (
       <div className="space-y-6">
@@ -193,6 +259,7 @@ export default function ReadPage({
   }
 
   const currentPhaseIdx = phaseIndex(paper.readingPhase);
+  const hasPdf = !!paper.pdfStoragePath;
 
   return (
     <div className="space-y-6">
@@ -210,6 +277,13 @@ export default function ReadPage({
             {paper.title}
           </p>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowSidebar((v) => !v)}
+        >
+          <PanelRight className="h-4 w-4" />
+        </Button>
         <Badge
           variant={
             paper.readingPhase === "completed" ? "default" : "secondary"
@@ -257,18 +331,39 @@ export default function ReadPage({
 
           return (
             <TabsContent key={pass.key} value={pass.key}>
-              <div className="grid gap-6 lg:grid-cols-3">
+              <div
+                className={`grid gap-6 ${showSidebar ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}
+              >
                 {/* Reading Area */}
                 <Card className="lg:col-span-2">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <BookOpen className="h-4 w-4" />
                       読解エリア
+                      {hasPdf && (
+                        <Badge variant="outline" className="ml-auto text-xs">
+                          <Highlighter className="mr-1 h-3 w-3" />
+                          ハイライト可能
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {paper.sections &&
-                    Object.values(paper.sections).some(Boolean) ? (
+                    {hasPdf ? (
+                      <div className="h-[600px]">
+                        <PDFViewer
+                          url={paper.pdfStoragePath!}
+                          onTextSelect={handleTextSelect}
+                          overlayContent={(pageNumber) => (
+                            <AnnotationLayer
+                              annotations={annotations}
+                              pageNumber={pageNumber}
+                            />
+                          )}
+                        />
+                      </div>
+                    ) : paper.sections &&
+                      Object.values(paper.sections).some(Boolean) ? (
                       <div className="prose prose-sm max-w-none dark:prose-invert">
                         {pass.key === "overview" && (
                           <div>
@@ -322,6 +417,20 @@ export default function ReadPage({
                             PDF をアップロードするとテキストが表示されます
                           </p>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Annotation Toolbar */}
+                    {textSelection && (
+                      <div className="mt-4">
+                        <AnnotationToolbar
+                          selectedText={textSelection.text}
+                          onAnnotate={handleAnnotate}
+                          onCancel={() => {
+                            setTextSelection(null);
+                            window.getSelection()?.removeAllRanges();
+                          }}
+                        />
                       </div>
                     )}
                   </CardContent>
@@ -391,15 +500,16 @@ export default function ReadPage({
                       ))}
                     </div>
 
-                    {!isCompleted && (isCurrent || paper.readingPhase === "not_started") && (
-                      <Button
-                        className="mt-4 w-full"
-                        onClick={() => completePass(passIndex)}
-                        disabled={saving}
-                      >
-                        {saving ? "保存中..." : "このパスを完了にする"}
-                      </Button>
-                    )}
+                    {!isCompleted &&
+                      (isCurrent || paper.readingPhase === "not_started") && (
+                        <Button
+                          className="mt-4 w-full"
+                          onClick={() => completePass(passIndex)}
+                          disabled={saving}
+                        >
+                          {saving ? "保存中..." : "このパスを完了にする"}
+                        </Button>
+                      )}
 
                     {isLocked && !isCompleted && (
                       <p className="text-xs text-center text-muted-foreground">
@@ -408,6 +518,24 @@ export default function ReadPage({
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Annotation Sidebar */}
+                {showSidebar && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Highlighter className="h-4 w-4" />
+                        アノテーション
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AnnotationSidebar
+                        annotations={annotations}
+                        onDelete={handleDeleteAnnotation}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </TabsContent>
           );
