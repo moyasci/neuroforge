@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { useDatabaseStatus } from "@/db/provider";
 import { getPapers, type Paper } from "@/lib/papers/actions";
+import { getNotes } from "@/lib/notes/actions";
+import { getProjects } from "@/lib/projects/actions";
 
 const PHASE_LABELS: Record<string, string> = {
   not_started: "未読",
@@ -45,6 +47,8 @@ function phaseProgress(phase: string): number {
 export default function DashboardPage() {
   const { isReady } = useDatabaseStatus();
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [noteCount, setNoteCount] = useState(0);
+  const [projectCount, setProjectCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -52,8 +56,14 @@ export default function DashboardPage() {
     try {
       const db = (await import("@/db/pglite")).getDatabase();
       if (!db) return;
-      const allPapers = await getPapers(db);
+      const [allPapers, allNotes, allProjects] = await Promise.all([
+        getPapers(db),
+        getNotes(db),
+        getProjects(db),
+      ]);
       setPapers(allPapers);
+      setNoteCount(allNotes.length);
+      setProjectCount(allProjects.length);
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
     } finally {
@@ -133,8 +143,8 @@ export default function DashboardPage() {
             <StickyNote className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-muted-foreground">Phase 3 で実装</p>
+            <div className="text-2xl font-bold">{noteCount}</div>
+            <p className="text-xs text-muted-foreground">作成済みノート</p>
           </CardContent>
         </Card>
         <Card>
@@ -143,8 +153,8 @@ export default function DashboardPage() {
             <FolderKanban className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-muted-foreground">Phase 6 で実装</p>
+            <div className="text-2xl font-bold">{projectCount}</div>
+            <p className="text-xs text-muted-foreground">進行中のプロジェクト</p>
           </CardContent>
         </Card>
       </div>

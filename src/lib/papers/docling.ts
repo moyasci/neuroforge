@@ -34,23 +34,10 @@ export interface DoclingExtractionResult {
 export async function extractPDF(
   pdfBuffer: ArrayBuffer,
 ): Promise<DoclingExtractionResult> {
-  // Phase 2 implementation:
-  // Will call Docling service (Python-based) via Hono Edge Function
-  // For now, return a placeholder
-
-  console.log(
-    `[Docling] Extracting PDF (${(pdfBuffer.byteLength / 1024).toFixed(1)} KB)`,
-  );
-
-  return {
-    markdown: "",
-    sections: {},
-    figures: [],
-    tables: [],
-    metadata: {
-      pageCount: 0,
-    },
-  };
+  // Client-side extraction via pdfjs-dist.
+  // Future: optionally route to Docling service for higher-precision extraction.
+  const { extractPDFClientSide } = await import("./pdf-extractor");
+  return extractPDFClientSide(pdfBuffer);
 }
 
 export async function extractPDFFromURL(

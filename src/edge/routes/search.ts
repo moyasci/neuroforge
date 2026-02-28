@@ -1,29 +1,44 @@
 import { Hono } from "hono";
+import { searchGraphRAG } from "@/lib/llm/graphrag";
 
 const search = new Hono();
 
 // POST /search - GraphRAG search endpoint
 // Accepts a query string and optional filters
-// Returns search results from the knowledge graph
+// Returns search results from the knowledge graph + PGLite text search
 search.post("/", async (c) => {
-  const { query, filters } = await c.req.json<{
+  const body = await c.req.json<{
     query: string;
-    filters?: Record<string, unknown>;
+    filters?: {
+      fields?: string[];
+      noteTypes?: string[];
+      dateRange?: { from: string; to: string };
+    };
   }>();
 
-  // TODO: Connect to Neo4j graph database
-  // TODO: Implement GraphRAG retrieval pipeline
-  // TODO: Apply filters to narrow search scope
-  // TODO: Rank and return results
+  if (!body.query || typeof body.query !== "string") {
+    return c.json({ error: "query is required" }, 400);
+  }
 
-  // Placeholder results
-  return c.json({
-    query,
-    filters: filters ?? {},
-    results: [],
-    totalCount: 0,
-    message: "GraphRAG search placeholder - implementation pending",
-  });
+  try {
+    const results = await searchGraphRAG(body.query, body.filters);
+
+    return c.json({
+      query: body.query,
+      filters: body.filters ?? {},
+      results,
+      totalCount: results.length,
+    });
+  } catch (err) {
+    console.error("[Search] Error:", err);
+    return c.json({
+      query: body.query,
+      filters: body.filters ?? {},
+      results: [],
+      totalCount: 0,
+      error: "Search failed",
+    }, 500);
+  }
 });
 
 export default search;

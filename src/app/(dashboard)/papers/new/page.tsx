@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useDatabase, useDatabaseStatus } from "@/db/provider";
 import { createPaper } from "@/lib/papers/actions";
+import { extractPDF } from "@/lib/papers/docling";
 import { fetchByDOI, fetchByURL } from "@/lib/papers/metadata";
 import type { PaperMetadata } from "@/lib/papers/metadata";
 import { PAPER_FIELDS, type PaperField } from "@/types";
@@ -73,6 +74,7 @@ function NewPaperForm() {
   // PDF tab state
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -132,9 +134,29 @@ function NewPaperForm() {
     setPdfLoading(true);
     setGlobalError(null);
     try {
+      // Step 1: Read file
+      setPdfProgress("読込中...");
+      const buffer = await pdfFile.arrayBuffer();
+
+      // Step 2: Extract text
+      setPdfProgress("テキスト抽出中...");
+      const result = await extractPDF(buffer);
+
+      // Step 3: Save to DB
+      setPdfProgress("保存中...");
       const titleFromFilename = pdfFile.name.replace(/\.pdf$/i, "");
       const paper = await createPaper(db, {
-        title: titleFromFilename,
+        title: result.metadata.title || titleFromFilename,
+        authors: result.metadata.authors,
+        abstract: result.metadata.abstract,
+        extractedText: result.markdown,
+        sections: {
+          intro: result.sections.introduction,
+          methods: result.sections.methods,
+          results: result.sections.results,
+          discussion: result.sections.discussion,
+          conclusion: result.sections.conclusion,
+        },
         sourceType: "pdf",
       });
       router.push(`/papers/${paper.id}`);
@@ -143,6 +165,7 @@ function NewPaperForm() {
         err instanceof Error ? err.message : "PDF登録に失敗しました。",
       );
       setPdfLoading(false);
+      setPdfProgress("");
     }
   };
 
@@ -364,7 +387,7 @@ function NewPaperForm() {
                 {pdfLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    処理中...
+                    {pdfProgress || "処理中..."}
                   </>
                 ) : (
                   "アップロードして登録"

@@ -28,7 +28,19 @@ export async function createFeedbackStream(
   request: FeedbackRequest,
   systemPrompt: string,
   apiKey: string,
+  history?: Array<{ role: string; content: string }>,
 ): Promise<ReadableStream> {
+  // Build messages array from history + current message
+  const messages: Array<{ role: string; content: string }> = [];
+
+  if (history && history.length > 0) {
+    for (const msg of history) {
+      messages.push({ role: msg.role, content: msg.content });
+    }
+  }
+
+  messages.push({ role: "user", content: request.message });
+
   const response = await fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
@@ -41,7 +53,7 @@ export async function createFeedbackStream(
       max_tokens: 4096,
       stream: true,
       system: systemPrompt,
-      messages: [{ role: "user", content: request.message }],
+      messages,
     }),
   });
 
